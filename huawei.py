@@ -20,6 +20,7 @@ class HuaWei:
     isLogin = False
     isCountdown = True
     isStartBuying = False
+    isBuying = False
     nickname = "游客"
     # 全局页面元素超时时间，单位S
     defaultTimeout = 60
@@ -36,7 +37,6 @@ class HuaWei:
             self.__visit_product_page()
             self.__choose_product()
             self.__countdown()
-            self.__start_buying()
 
     def stop_process(self):
         print("{0} 结束抢购华为 {1} 手机".format(datetime.now(), self.__config_get("product", "name")))
@@ -89,10 +89,12 @@ class HuaWei:
     def __browser_setting(self):
         print("{0} 开始设置浏览器参数".format(datetime.now()))
         options = webdriver.ChromeOptions()
-        options.add_argument(r"--user-data-dir={}".format(self.__config_get("chrome", "userDataDir")))
-        options.add_argument(r"--profile-directory={}".format("Profile 5"))
+        service = Service(executable_path=r'D:\git\hw_seckill\chromedriver.exe')
+        options.add_experimental_option("excludeSwitches", ["enable-logging"])
+        # options.add_argument(r"--user-data-dir={}".format(self.__config_get("chrome", "userDataDir")))
+        # options.add_argument(r"--profile-directory={}".format("Profile 5"))
         options.add_argument('--ignore-certificate-errors')
-        browser = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        browser = webdriver.Chrome(service=service, options=options)
         print("{0} 设置浏览器参数完成".format(datetime.now()))
         browser.maximize_window()
         self.browser = browser
@@ -100,40 +102,62 @@ class HuaWei:
     def __countdown(self):
         while self.isCountdown:
             countdown_times = self.__get_countdown_time()
-            if len(countdown_times) > 0:
-                print("{0} 距离抢购开始还剩：{1}".format(datetime.now(), self.__format_countdown_time(countdown_times)))
-                self.__set_start_buying(countdown_times)
-                if not self.isStartBuying:
-                    time.sleep(1)
+            print("{0} 距离抢购开始还剩：{1}".format(datetime.now(), self.__format_countdown_time(countdown_times)))
+            self.__set_start_buying(countdown_times)
+            if not self.isStartBuying:
+                time.sleep(1)
+            else:
+                self.__start_buying()
 
     def __start_buying(self):
         while self.isStartBuying:
             countdown_times = self.__get_countdown_time()
-            if len(countdown_times) > 0:
+            if(not self.isBuying):
                 print("{0} 距离抢购开始还剩：{1}".format(datetime.now(), self.__format_countdown_time(countdown_times)))
-                button_element = WebDriverWait(self.browser, self.defaultTimeout).until(
-                    EC.presence_of_element_located((By.XPATH, "//div[@id='pro-operation']/a"))
-                )
-                button_element.click()
-                time.sleep(0.0001)
-
-    def __get_countdown_time(self):
-        attempts = 0
-        countdown_times = []
-        while attempts < 5:
-            try:
-                elements = WebDriverWait(self.browser, self.defaultTimeout).until(
-                    EC.presence_of_all_elements_located((By.XPATH, "//div[@id='pro-operation-countdown']/ul/li/span"))
-                )
-                for element in elements:
-                    countdown_times.append(element.text)
-                return countdown_times
-            except (StaleElementReferenceException, TimeoutException):
-                # 页面元素因为动态渲染，导致查找的元素不再是原来的元素，导致异常
                 self.browser.refresh()
                 self.browser.implicitly_wait(20)
                 self.__choose_product()
-                attempts += 1
+                self.browser.implicitly_wait(100)
+                button_element = WebDriverWait(self.browser, self.defaultTimeout).until(
+                    EC.presence_of_element_located((By.XPATH, "//div[@id='pro-operation']/a"))
+                )
+            if(button_element.text != '暂时缺货'):
+                button_element.click()
+                print("刷到手机开始抢购")
+                self.isBuying = True
+            time.sleep(0.0001)
+            self.__set_start_buying(countdown_times)
+        self.__countdown()
+        
+
+    def __get_countdown_time(self):
+        attempts = 0
+        current_time = datetime.now()
+        countdown_times = ["00","00","00","60"]
+        minute = current_time.minute
+        if(minute == 1 or minute == 3 or minute == 5 or minute == 7 or minute == 9
+           or minute == 11 or minute == 13 or minute == 15 or minute == 17 or minute == 19
+           or minute == 21 or minute == 23 or minute == 25 or minute == 27 or minute == 29
+           or minute == 31 or minute == 33 or minute == 35 or minute == 37 or minute == 39
+           or minute == 41 or minute == 43 or minute == 45 or minute == 47 or minute == 49
+           or minute == 51 or minute == 53 or minute == 55 or minute == 57 or minute == 59):
+            countdown_times[3] = "0"
+        else:
+            countdown_times[3] = str(60 - current_time.second)
+        # while attempts < 5:
+        #     try:
+        #         elements = WebDriverWait(self.browser, self.defaultTimeout).until(
+        #             EC.presence_of_all_elements_located((By.XPATH, "//div[@id='pro-operation-countdown']/ul/li/span"))
+        #         )
+        #         for element in elements:
+        #             countdown_times.append(element.text)
+        #         return countdown_times
+        #     except (StaleElementReferenceException, TimeoutException):
+        #         # 页面元素因为动态渲染，导致查找的元素不再是原来的元素，导致异常
+        #         self.browser.refresh()
+        #         self.browser.implicitly_wait(20)
+        #         self.__choose_product()
+        #         attempts += 1
         return countdown_times
 
     def __config_get(self, group_name, item_name):
@@ -162,6 +186,9 @@ class HuaWei:
         if int(countdown_times[3]) < 10:
             self.isCountdown = False
             self.isStartBuying = True
+        else:
+            self.isCountdown = True
+            self.isStartBuying = False
 
     def __goto_login_page(self):
         print("{0} 点击登录按钮".format(datetime.now()))
